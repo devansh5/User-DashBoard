@@ -1,14 +1,17 @@
 from django.shortcuts import render,redirect
-from django.http import HttpResponse
+from django.http import HttpResponse,HttpResponseRedirect
 from django.contrib.auth.forms import UserCreationForm,UserChangeForm,PasswordChangeForm
 from django.contrib.auth import authenticate, login as auth_login, logout
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.auth import update_session_auth_hash
 from .forms import CreateUserForm,EditProfileForm,ProfileUpdate
 from django.contrib.auth.decorators import login_required
 from .models import *
+import json
+from django.template.loader import render_to_string
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 
 
 
@@ -17,20 +20,22 @@ from .models import *
 def register(request):
     if request.user.is_authenticated:
         return redirect('/')
+    if request.method == 'POST' and request.is_ajax():
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        password1 = request.POST.get('password1')
+        password2 = request.POST.get('password2')
+        data = {'username':username,'email':email,'password1':password1,'password2':password2}
+        form = CreateUserForm(data=data)
+        if form.is_valid():
+            user = form.save()
+            user.is_active = True
+            return HttpResponse(json.dumps({"message":"Success"}),content_type="application/json")
+        else:
+            return HttpResponse(json.dumps({"message":form.errors}),content_type="application/json")
     else:
         form = CreateUserForm()
-        if request.method == 'POST':
-            form = CreateUserForm(request.POST)
-            if form.is_valid():
-                form.save()
-                user = form.cleaned_data.get('username')
-                messages.success(request, 'Account was created for ' + user)
-                return redirect('login')
-            else:
-                messages.info(request,'Password is too short ,min - 8 char')
-
-        context = {'form':form}
-        return render(request,'maze/register.html',context)
+    return HttpResponse(json.dumps({"message":"Denied"}),content_type="application/json")
 
 
 def login(request):
@@ -38,21 +43,23 @@ def login(request):
         return redirect('/')
     else:
         if request.method == 'POST':
-            username = request.POST.get('username')
+            email = request.POST.get('email')
             password =request.POST.get('password')
-            user = authenticate(request, username=username, password=password)
+            user = authenticate(request, email=email, password=password)
             if user is not None:
-                auth_login(request, user)
-                return redirect('/')
+                if user.is_active:
+                    auth_login(request, user)
+                    return HttpResponse(json.dumps({"message":"Success"}),content_type="application/json")
             else:
-                messages.info(request, 'Username OR password is incorrect')
-        context = { }
-        return render(request,'maze/login.html',context)
+                return HttpResponse(json.dumps({"message":"inactive"}),content_type="application/json")
+        else:
+            return HttpResponse(json.dumps({"message": "invalid"}),content_type="application/json")
+        return HttpResponse(json.dumps({"message":"denied"}),content_type="application/json")
 
 @login_required(login_url='login')
 def logoutuser(request):
     logout(request)
-    return redirect('/')
+    return render(request,'maze/index.html')
   
 
 def index(request):
