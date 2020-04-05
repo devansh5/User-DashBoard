@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 from django.shortcuts import render,redirect
 from django.http import HttpResponse,HttpResponseRedirect
 from django.contrib.auth.forms import UserCreationForm,UserChangeForm,PasswordChangeForm
@@ -9,6 +10,7 @@ from .forms import CreateUserForm,EditProfileForm,ProfileUpdate
 from django.contrib.auth.decorators import login_required
 from .models import *
 import json
+
 from django.template.loader import render_to_string
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -20,7 +22,8 @@ from django.utils.http import urlsafe_base64_encode
 def register(request):
     if request.user.is_authenticated:
         return redirect('/')
-    if request.method == 'POST' and request.is_ajax():
+
+    if request.POST.get('act') == 'post':
         username = request.POST.get('username')
         email = request.POST.get('email')
         password1 = request.POST.get('password1')
@@ -28,13 +31,15 @@ def register(request):
         data = {'username':username,'email':email,'password1':password1,'password2':password2}
         form = CreateUserForm(data=data)
         if form.is_valid():
-            user = form.save()
+            
+            user = form.save(commit=False)
             user.is_active = True
+            user.save()
             return HttpResponse(json.dumps({"message":"Success"}),content_type="application/json")
         else:
             return HttpResponse(json.dumps({"message":form.errors}),content_type="application/json")
     else:
-        form = CreateUserForm()
+        form=CreateUserForm()
     return HttpResponse(json.dumps({"message":"Denied"}),content_type="application/json")
 
 
@@ -42,10 +47,10 @@ def login(request):
     if request.user.is_authenticated:
         return redirect('/')
     else:
-        if request.method == 'POST':
-            email = request.POST.get('email')
+        if request.POST.get('action') == 'post':
+            username = request.POST.get('username')
             password =request.POST.get('password')
-            user = authenticate(request, email=email, password=password)
+            user = authenticate(request, username=username, password=password)
             if user is not None:
                 if user.is_active:
                     auth_login(request, user)
@@ -72,11 +77,11 @@ def view_profile(request):
 
 @login_required(login_url='login')
 def edit_profile(request):
-
     try:
         user_profile = Profile.objects.get(user=request.user)
     except Profile.DoesNotExist:
         return HttpResponse("invalid user_profile!")
+
 
     if request.method == 'POST':
         form = EditProfileForm(request.POST ,instance=request.user)
